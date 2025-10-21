@@ -1,0 +1,44 @@
+name: custom-aerospace
+
+on:
+  workflow_dispatch: {}   # lets you click "Run workflow" by hand
+  schedule:
+    - cron: "17 */6 * * *"   # every 6 hours (optional; tweak or remove)
+
+jobs:
+  patchset:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare remotes
+        run: |
+          set -euxo pipefail
+          git remote add upstream https://github.com/nikitabobko/AeroSpace.git || true
+          git fetch --prune upstream
+
+      - name: Compose custom-main from upstream + PRs
+        env:
+          # Put your PR numbers here, space-separated, e.g.: "123 456"
+          PRS: "1618"
+        run: |
+          set -euxo pipefail
+          # Start from the latest upstream main
+          git checkout -B custom-main upstream/main
+
+          # Merge each PR on top (prefer the GitHub "merge ref" if available)
+          for P in $PRS; do
+            git fetch upstream pull/$P/merge:pr-$P-merge || true
+            git fetch upstream pull/$P/head:pr-$P-head || true
+
+            if git rev-parse --verify pr-$P-merge >/dev/null 2>&1; then
+              git merge --no-edit --no-ff pr-$P-merge
+            else
+              git merge --no-edit --no-ff pr-$P-head
+            fi
+          done
+
+          # Publish the composed branch to your fork
+          git push --force origin custom-main
